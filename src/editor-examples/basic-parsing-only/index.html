@@ -1,0 +1,69 @@
+<!DOCTYPE html !>
+<html>
+
+	<head>
+	
+		<title>SCnML parser test</title>
+
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+		
+		<script type="text/javascript" src="scnmlparser.js"></script>
+		<script type="text/javascript" src="scnml.xml.gen.js"></script>
+		<script type="text/javascript" src="jquery.js"></script>
+		
+		<script type="text/javascript">
+
+		$.createElement = function(name)
+		{
+		    return $('<'+name+' />');
+		};
+
+		$.fn.appendNewElement = function(name)
+		{
+		    this.each(function(i)
+		    {
+		        $(this).append('<'+name+' />');
+		    });
+		    return this;
+		}
+
+		function go() {
+			var input = $("#source").val();
+			var arcs = [
+					"->",
+					"<-",
+					"~>",
+					"<~",
+					"!=",
+					"<+",
+					"+>"
+				];
+			var relations = [
+					"=>",
+					"<=",
+					"<=>"
+				];
+			var predefinedRelMarkers = [
+					["=", "синонимия*"]
+				];
+			var brackets = [
+					['["', '"]', "content"],
+					['{"', '"}', "content"]
+				];
+			var parser = new SCnML.Parser(arcs, relations, predefinedRelMarkers, brackets);
+			$("#string_tree").text(parser.parse(input).toString());
+		}
+		</script>
+		
+	</head>
+	
+	<body>
+
+		<textarea id="source" style="width: 80%; height: 600px;"></textarea>
+		<br/>
+		<input type="button" value="Process!" onclick="go()" />
+		<br/>
+		<pre id="string_tree" style="font: normal 12px 'Courier New'; width: 80%;"></pre>
+	</body>
+	
+</html>
