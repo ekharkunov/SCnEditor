@@ -1,3 +1,12 @@
+#
+# This file contains Semantic Code natural Markup Language parser
+# that will be compiled into JavaScript target.
+#
+# This is a part of OSTIS technology (see http://ostis.net)
+#
+# Author: Burov Alexander (burikella@gmail.com) 2012
+#
+
 window.SCnML = {}
 
 class SCnML.Parser
