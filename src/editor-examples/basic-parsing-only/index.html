@@ -7,8 +7,7 @@
 
 		<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 		
-		<script type="text/javascript" src="scnmlparser.js"></script>
-		<script type="text/javascript" src="scnml.xml.gen.js"></script>
+		<script type="text/javascript" src="../../parser/scnmlparser.js"></script>
 		<script type="text/javascript" src="jquery.js"></script>
 		
 		<script type="text/javascript">
@@ -59,11 +58,13 @@
 	
 	<body>
 
-		<textarea id="source" style="width: 80%; height: 600px;"></textarea>
-		<br/>
+		<textarea id="source" style="width: 49%; margin: 0 1% 0 0; padding: 0; height: 600px; float: left;"></textarea>
+		<pre id="string_tree" style="font: normal 12px 'Courier New'; width: 50%; height: 600px; float: left; margin: 0; padding: 0; overflow: scroll;"></pre>
+
+		<div style="clear: both"></div>
+
 		<input type="button" value="Process!" onclick="go()" />
-		<br/>
-		<pre id="string_tree" style="font: normal 12px 'Courier New'; width: 80%;"></pre>
+
 	</body>
 	
 </html>
