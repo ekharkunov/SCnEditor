@@ -1,1 +1,18 @@
-Simple Javascript editor for easy SCn article creation
+This project is reffered to Open Semantic Technologies for Intelligent Systems (see http://ostis.net/).
+Main purpose of this project is to develop human-oriented well-readably markup for writing SCn articles.
+
+To achieve the purpose we need to:
+ - determine (clarify) needs of the SCn ML;
+ - develop syntax with required for this ML possibilities;
+ - develop and implemet the translator from newly created markup to some wide-known format;
+ - implemet at least one way to translate developed ML to some of the formats user by OSTIS technology;
+ - develop the web-based SCn ML source editor (using JavaScript).
+
+Project plan:
+ - writing a number of articles in new ML;
+ - using writed examples specify markup format;
+ - implement markup parser;
+ - develop generator to xml;
+ - develop translator to scs from xml;
+ - integrate developed parser with Ace (Ajax.org Cloud9 Editor) editor (see http://ajaxorg.github.com/ace/);
+ - integrate result editor with MediaWiki system (it's now used system in the OSTIS projects).
