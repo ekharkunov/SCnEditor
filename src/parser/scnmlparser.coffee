@@ -111,13 +111,6 @@ class SCnML.Parser
 			@parseNewLine()
 		return
 
-	markerFollows: ->
-		for m in @arcMarkers when @startsWith m
-			return true
-		for m in @relMarkers when @startsWith m
-			return true
-		return false
-
 	bracketFollows: ->
 		for b in @brackets when @startsWith b[0]
 			return true
@@ -210,23 +203,8 @@ class SCnML.Parser
 					current += ch
 				return @readUntil str, current, hasBackSlash
 
-	parseMarker: ->
-		m = @parseArcMarker()
-		if m?
-			return {type: 'arc', marker: m}
-		else
-			m = @parseRelMarker()
-			if m?
-				return {type: 'rel', marker: m}
-			else
-				m = @parsePredefRelMarker()
-				if m?
-					return {type: 'predef', marker: m}
-				else
-					return null
-
 	parseArcMarker: ->
-		for m in @arcMarkers when @isMatchMarker m
+		for m in @arcMarkers when @isMatchMarker mх[0]
 			@moveNextChar m.length
 			return m
 		return null

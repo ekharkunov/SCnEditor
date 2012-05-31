@@ -29,13 +29,13 @@
 		function go() {
 			var input = $("#source").val();
 			var arcs = [
-					"->",
-					"<-",
-					"~>",
-					"<~",
-					"!=",
-					"<+",
-					"+>"
+					["->", "contains"],
+					["<-", "isElementOf"],
+					["~>", ""],
+					["<~", ""],
+					["!=", "fuzz"],
+					["<+", "notContains"],
+					["+>", "isNotElementOf"],
 				];
 			var relations = [
 					"=>",
