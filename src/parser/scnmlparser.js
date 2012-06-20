@@ -1,20 +1,17 @@
 (function() {
   window.SCnML = {};
   SCnML.Parser = (function() {
-    Parser.markerChar = /[\u0021-\u002f]|[\u003a-\u0040]|[\u005b-\u0060]/gi;
-    function Parser(arcMarkers, relMarkers, preDefRelMarkers, brackets) {
-      this.arcMarkers = arcMarkers;
-      this.relMarkers = relMarkers;
-      this.preDefRelMarkers = preDefRelMarkers;
-      this.brackets = brackets;
-      if (typeof this.arcMarkers === "undefined") {
-        this.arcMarkers = [];
+    function Parser(markers, contentLimits) {
+      this.markers = markers;
+      this.contentLimits = contentLimits;
+      if (typeof this.predefinedRelMarkers === "undefined") {
+        this.predefinedRelMarkers = [];
       }
-      if (typeof this.relMarkers === "undefined") {
-        this.relMarkers = [];
+      if (typeof this.customRelMarkers === "undefined") {
+        this.customRelMarkers = [];
       }
-      if (typeof this.brackets === "undefined") {
-        this.brackets = [];
+      if (typeof this.contentLimits === "undefined") {
+        this.contentLimits = [];
       }
     }
     Parser.prototype.parse = function(source) {
@@ -73,79 +70,66 @@
       this.parseComponentInner(article, indent + 1);
       return article;
     };
-    Parser.prototype.parseId = function(current, hasUnderscore) {
-      var ch;
-      if (typeof current === "undefined") {
-        return this.parseId('', false);
-      } else {
-        ch = this.src[0];
+    Parser.prototype.parseId = function() {
+      var ch, hasUnderscore, id, _i, _len, _ref;
+      id = "";
+      hasUnderscore = false;
+      _ref = this.src;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        ch = _ref[_i];
         if (ch !== '\n' && (ch !== ':' || !hasUnderscore)) {
           hasUnderscore = ch === '_' || ((ch === ' ' || ch === '\t') && hasUnderscore);
-          this.moveNextChar();
-          return this.parseId(current + ch, hasUnderscore);
+          id += ch;
         } else {
-          return current;
+          this.moveNextChar(id.length);
+          return id;
         }
       }
     };
     Parser.prototype.parseComponentInner = function(parent, indent) {
-      var arc, arcMarker, conn, id, predef, rel;
+      var conn, marker, relation;
       this.parseNewLine();
       while (this.getIndent() === indent) {
         this.parseIndent();
-        arcMarker = this.parseArcMarker();
-        if (arcMarker != null) {
-          this.parseSpace();
-          arc = new SCnML.Arc(arcMarker);
-          parent.addChild(arc);
-          this.parseInlineComponent(arc, indent);
-        } else {
-          rel = this.parseRelMarker();
-          if (rel != null) {
-            this.parseSpace();
-            id = this.parseId();
-            conn = new SCnML.Connective(rel, id);
-            parent.addChild(conn);
-            this.parseComponents(conn, indent + 1);
-          } else {
-            predef = this.parsePredefRelMarker();
-            if (predef != null) {
-              this.parseSpace();
-              conn = new SCnML.Connective(predef[0], predef[1]);
+        marker = this.parseMarker();
+        if (marker != null) {
+          switch (marker.set) {
+            case "predefined":
+              conn = new SCnML.Connective(marker.type, marker.relation);
               parent.addChild(conn);
               this.parseInlineComponent(conn, indent);
-            } else {
-              throw "Expected Arc or Relation marker at line " + this.getCurrentLine() + "!";
-            }
+              break;
+            case "custom":
+              this.parseSpace();
+              relation = this.parseId();
+              conn = new SCnML.Connective(marker.type, relation);
+              parent.addChild(conn);
+              this.parseComponents(conn, indent + 1);
           }
+        } else {
+          throw "Expected marker ar line " + this.getCurrentLine() + ".";
         }
         this.parseNewLine();
       }
     };
-    Parser.prototype.markerFollows = function() {
-      var m, _i, _j, _len, _len2, _ref, _ref2;
-      _ref = this.arcMarkers;
+    Parser.prototype.parseMarker = function() {
+      var m, _i, _len, _ref;
+      _ref = this.markers;
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         m = _ref[_i];
-        if (this.startsWith(m)) {
-          return true;
+        if (this.isMatchMarker(m[0])) {
+          this.moveNextChar(m[0].length);
+          return m[1];
         }
       }
-      _ref2 = this.relMarkers;
-      for (_j = 0, _len2 = _ref2.length; _j < _len2; _j++) {
-        m = _ref2[_j];
-        if (this.startsWith(m)) {
-          return true;
-        }
-      }
-      return false;
+      return null;
     };
-    Parser.prototype.bracketFollows = function() {
-      var b, _i, _len, _ref;
-      _ref = this.brackets;
+    Parser.prototype.contentFollows = function() {
+      var c, _i, _len, _ref;
+      _ref = this.contentLimits;
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        b = _ref[_i];
-        if (this.startsWith(b[0])) {
+        c = _ref[_i];
+        if (this.startsWith(c.begin)) {
           return true;
         }
       }
@@ -188,52 +172,72 @@
       }
     };
     Parser.prototype.parseInlineComponent = function(parent, indent) {
-      var attrs, comp, conn, content, frame, id;
-      content = this.parseContent();
-      if (content != null) {
-        comp = new SCnML.Component(content.type, content.content);
-        parent.addChild(comp);
-      } else {
-        attrs = [];
+      var attrs, comp, content, frame, id, set;
+      attrs = [];
+      while (this.attrFollows()) {
         id = this.parseId();
+        this.moveNextChar();
         this.parseSpace();
-        while (this.src[0] === ':') {
-          this.moveNextChar();
-          this.parseSpace();
-          attrs.push(id);
-          id = this.parseId();
-          this.parseSpace();
-        }
-        if (id === '[' && !this.bracketFollows()) {
-          this.squareBrackets++;
-          this.moveNextChar();
-          frame = new SCnML.Frame(attrs);
-          parent.addChild(frame);
-          this.parseFrame(frame, arcMarker, indent + 1);
-        } else if (id === '{' && !this.bracketFollows()) {
-          this.curlyBrackets++;
-          this.moveNextChar();
-          conn = new SCnML.Connective('undef', 'undef', attrs);
-          parent.addChild(conn);
-          this.parseComponents(conn, indent + 1);
-        } else {
-          comp = new SCnML.Component("ID", id, attrs);
+        attrs.push(id);
+      }
+      this.parseSpace();
+      if (this.contentFollows()) {
+        content = this.parseContent();
+        if (content != null) {
+          comp = new SCnML.Component(content.type, content.content, attrs);
           parent.addChild(comp);
+        } else {
+          throw "Content expected at line " + this.getCurrentLine() + ".";
         }
+      } else if (this.src[0] === '{') {
+        this.curlyBrackets++;
+        this.moveNextChar();
+        set = new SCnML.Set(attrs);
+        parent.addChild(set);
+        this.parseComponents(set, indent + 1);
+      } else if (this.src[0] === '[') {
+        this.squareBrackets++;
+        this.moveNextChar();
+        frame = new SCnML.Frame(attrs);
+        parent.addChild(frame);
+        this.parseFrame(frame, arcMarker, indent + 1);
+      } else {
+        id = this.parseId();
+        comp = new SCnML.Component("ID", id, attrs);
+        parent.addChild(comp);
       }
       this.parseComponentInner(comp, indent + 1);
       return true;
     };
+    Parser.prototype.attrFollows = function() {
+      var attr, ch, hasUnderscore, _i, _len, _ref, _results;
+      attr = "";
+      hasUnderscore = false;
+      _ref = this.src;
+      _results = [];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        ch = _ref[_i];
+        if (ch !== '\n' && (ch !== ':' || !hasUnderscore)) {
+          hasUnderscore = ch === '_' || ((ch === ' ' || ch === '\t') && hasUnderscore);
+          attr += ch;
+        } else if (ch === ':') {
+          return attr.length > 0;
+        } else {
+          return false;
+        }
+      }
+      return _results;
+    };
     Parser.prototype.parseContent = function() {
       var c, _i, _len, _ref;
-      _ref = this.brackets;
+      _ref = this.contentLimits;
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         c = _ref[_i];
-        if (this.startsWith(c[0])) {
-          this.moveNextChar(c[0].length);
+        if (this.startsWith(c.begin)) {
+          this.moveNextChar(c.begin.length);
           return {
-            type: c[2],
-            content: this.readUntil(c[1])
+            type: c.type,
+            content: this.readUntil(c.end)
           };
         }
       }
@@ -257,70 +261,6 @@
           return this.readUntil(str, current, hasBackSlash);
         }
       }
-    };
-    Parser.prototype.parseMarker = function() {
-      var m;
-      m = this.parseArcMarker();
-      if (m != null) {
-        return {
-          type: 'arc',
-          marker: m
-        };
-      } else {
-        m = this.parseRelMarker();
-        if (m != null) {
-          return {
-            type: 'rel',
-            marker: m
-          };
-        } else {
-          m = this.parsePredefRelMarker();
-          if (m != null) {
-            return {
-              type: 'predef',
-              marker: m
-            };
-          } else {
-            return null;
-          }
-        }
-      }
-    };
-    Parser.prototype.parseArcMarker = function() {
-      var m, _i, _len, _ref;
-      _ref = this.arcMarkers;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        m = _ref[_i];
-        if (this.isMatchMarker(m)) {
-          this.moveNextChar(m.length);
-          return m;
-        }
-      }
-      return null;
-    };
-    Parser.prototype.parseRelMarker = function() {
-      var m, _i, _len, _ref;
-      _ref = this.relMarkers;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        m = _ref[_i];
-        if (this.isMatchMarker(m)) {
-          this.moveNextChar(m.length);
-          return m;
-        }
-      }
-      return null;
-    };
-    Parser.prototype.parsePredefRelMarker = function() {
-      var m, _i, _len, _ref;
-      _ref = this.preDefRelMarkers;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        m = _ref[_i];
-        if (this.isMatchMarker(m[0])) {
-          this.moveNextChar(m[0].length);
-          return m;
-        }
-      }
-      return null;
     };
     Parser.prototype.isMatchMarker = function(marker) {
       var nextChar;
@@ -403,16 +343,16 @@
       this.concept = concept;
       this.childs = [];
     }
-    Article.prototype.toString = function() {
-      var child, string, _i, _len, _ref;
-      string = "(article[" + this.concept + "]:\n";
+    Article.prototype.getXml = function() {
+      var child, root, _i, _len, _ref;
+      root = $('<SCnArticle/>');
+      root.append($('<Concept />').text(this.concept));
       _ref = this.childs;
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         child = _ref[_i];
-        string += "\n\t" + child.toString().replace("\n", "\n\t", "mg");
+        root.append(child.getXml());
       }
-      string += "\n)";
-      return string;
+      return root;
     };
     Article.prototype.addChild = function(child) {
       this.childs.push(child);
@@ -431,25 +371,30 @@
       this.text = text;
       this.attrs = attrs;
       this.childs = [];
-    }
-    Component.prototype.toString = function() {
-      var attr, child, string, _i, _j, _len, _len2, _ref, _ref2;
-      string = "(component[" + this.type + "] {";
-      if (typeof this.attrs === 'object') {
-        _ref = this.attrs;
-        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-          attr = _ref[_i];
-          string += attr + ": ";
-        }
+      if (typeof this.attrs === "undefined") {
+        this.attrs = [];
       }
-      string += this.text + "}:\n";
+    }
+    Component.prototype.getXml = function() {
+      var attr, child, root, _i, _j, _len, _len2, _ref, _ref2;
+      root = $('<Component/>');
+      if (this.type === "ID") {
+        root.append($('<Id/>').text(this.text));
+      } else {
+        root.append($('<Type/>').text(this.type));
+        root.append($('<Content/>').text(this.text));
+      }
+      _ref = this.attrs;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        attr = _ref[_i];
+        root.append($('<Attr />').text(attr));
+      }
       _ref2 = this.childs;
       for (_j = 0, _len2 = _ref2.length; _j < _len2; _j++) {
         child = _ref2[_j];
-        string += "\n\t" + child.toString().replace("\n", "\n\t", "mg");
+        root.append(child.getXml());
       }
-      string += "\n)";
-      return string;
+      return root;
     };
     Component.prototype.addChild = function(child) {
       this.childs.push(child);
@@ -465,28 +410,65 @@
     };
     return Component;
   })();
+  SCnML.Set = (function() {
+    function Set(attrs) {
+      this.attrs = attrs;
+      this.childs = [];
+      if (typeof this.attrs === "undefined") {
+        this.attrs = [];
+      }
+    }
+    Set.prototype.getXml = function() {
+      var attr, child, root, _i, _j, _len, _len2, _ref, _ref2;
+      root = $('<Set/>');
+      _ref = this.attrs;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        attr = _ref[_i];
+        root.append($('<Attr />').text(attr));
+      }
+      _ref2 = this.childs;
+      for (_j = 0, _len2 = _ref2.length; _j < _len2; _j++) {
+        child = _ref2[_j];
+        root.append(child.getXml());
+      }
+      return root;
+    };
+    Set.prototype.addChild = function(child) {
+      this.childs.push(child);
+    };
+    Set.prototype.getChilds = function() {
+      return this.childs;
+    };
+    Set.prototype.getAttrs = function() {
+      return this.attrs;
+    };
+    Set.prototype.getClassName = function() {
+      return "Set";
+    };
+    return Set;
+  })();
   SCnML.Frame = (function() {
     function Frame(attrs) {
       this.attrs = attrs;
       this.childs = [];
-    }
-    Frame.prototype.toString = function() {
-      var attr, child, string, _i, _j, _len, _len2, _ref, _ref2;
-      string = "(frame ";
-      if (typeof this.attrs === 'object') {
-        _ref = this.attrs;
-        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-          attr = _ref[_i];
-          string += attr + ": ";
-        }
+      if (typeof this.attrs === "undefined") {
+        this.attrs = [];
       }
-      string += this.text + "\n";
+    }
+    Frame.prototype.getXml = function() {
+      var attr, child, root, _i, _j, _len, _len2, _ref, _ref2;
+      root = $('<Frame/>');
+      _ref = this.attrs;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        attr = _ref[_i];
+        root.append($('<Attr />').text(attr));
+      }
       _ref2 = this.childs;
       for (_j = 0, _len2 = _ref2.length; _j < _len2; _j++) {
         child = _ref2[_j];
-        string += "\n\t" + child.toString().replace("\n", "\n\t", "mg");
+        root.append(child.getXml());
       }
-      return string += "\n)";
+      return root;
     };
     Frame.prototype.addChild = function(child) {
       this.childs.push(child);
@@ -502,56 +484,32 @@
     };
     return Frame;
   })();
-  SCnML.Arc = (function() {
-    function Arc(marker) {
-      this.marker = marker;
-      this.childs = [];
-    }
-    Arc.prototype.toString = function() {
-      var string;
-      string = "(arc[" + this.marker + "]\n\t";
-      if (this.childs.length > 0) {
-        string += this.childs[0].toString().replace("\n", "\n\t", "mg");
-      }
-      string += "\n)";
-      return string;
-    };
-    Arc.prototype.addChild = function(child) {
-      this.childs.push(child);
-    };
-    Arc.prototype.getChilds = function() {
-      return this.childs;
-    };
-    Arc.prototype.getClassName = function() {
-      return "Arc";
-    };
-    return Arc;
-  })();
   SCnML.Connective = (function() {
-    function Connective(marker, text, attrs) {
-      this.marker = marker;
-      this.text = text;
+    function Connective(type, relation, attrs) {
+      this.type = type;
+      this.relation = relation;
       this.attrs = attrs;
       this.childs = [];
-    }
-    Connective.prototype.toString = function() {
-      var attr, child, string, _i, _j, _len, _len2, _ref, _ref2;
-      string = "(connective[" + this.marker + "] ";
-      if (typeof this.attrs === 'object') {
-        _ref = this.attrs;
-        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-          attr = _ref[_i];
-          string += attr + ": ";
-        }
+      if (typeof this.attrs === "undefined") {
+        this.attrs = [];
       }
-      string += this.text + "{" + this.text + "}:\n";
+    }
+    Connective.prototype.getXml = function() {
+      var attr, child, root, _i, _j, _len, _len2, _ref, _ref2;
+      root = $('<Connective/>');
+      root.append($('<Type/>').text(this.type));
+      root.append($('<Relation/>').text(this.relation));
+      _ref = this.attrs;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        attr = _ref[_i];
+        root.append($('<Attr />').text(attr));
+      }
       _ref2 = this.childs;
       for (_j = 0, _len2 = _ref2.length; _j < _len2; _j++) {
         child = _ref2[_j];
-        string += "\n\t" + child.toString().replace("\n", "\n\t", "mg");
+        root.append(child.getXml());
       }
-      string += "\n)";
-      return string;
+      return root;
     };
     Connective.prototype.addChild = function(child) {
       this.childs.push(child);

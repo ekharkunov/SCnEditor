@@ -11,46 +11,84 @@
 		<script type="text/javascript" src="jquery.js"></script>
 		
 		<script type="text/javascript">
-
-		$.createElement = function(name)
-		{
-		    return $('<'+name+' />');
-		};
-
-		$.fn.appendNewElement = function(name)
-		{
-		    this.each(function(i)
-		    {
-		        $(this).append('<'+name+' />');
-		    });
-		    return this;
-		}
-
 		function go() {
 			var input = $("#source").val();
-			var arcs = [
-					["->", "contains"],
-					["<-", "isElementOf"],
-					["~>", ""],
-					["<~", ""],
-					["!=", "fuzz"],
-					["<+", "notContains"],
-					["+>", "isNotElementOf"],
+			var markers = [
+					["=", {
+						set: "predefined",
+						type: "bin/forward",
+						relation: "synonym"
+					}],
+					["->", {
+						set: "predefined",
+						type: "bin/forward",
+						relation: "contains"
+					}],
+					["<-", {
+						set: "predefined",
+						type: "bin/backward",
+						relation: "contains"
+					}],
+					["~>", {
+						set: "predefined",
+						type: "bin/forward",
+						relation: "varContains"
+					}],
+					["<~", {
+						set: "predefined",
+						type: "bin/backward",
+						relation: "varContains"
+					}],
+					["!=", {
+						set: "predefined",
+						type: "bin/none",
+						relation: "fuzzle"
+					}],
+					["<+", {
+						set: "predefined",
+						type: "bin/backward",
+						relation: "notContains"
+					}],
+					["+>", {
+						set: "predefined",
+						type: "bin/forward",
+						relation: "notContains"
+					}],
+					["=>", {
+						set: "custom",
+						type: "bin/forward"
+					}],
+					["<=", {
+						set: "custom",
+						type: "bin/backward"
+					}],
+					["<=>", {
+						set: "custom",
+						type: "bin/none"
+					}],
+					["$", {
+						set: "custom",
+						type: "custom"
+					}]
 				];
-			var relations = [
-					"=>",
-					"<=",
-					"<=>"
+			var content = [
+					{
+						begin: '["',
+						end: '"]',
+						type: "content1"
+					},
+					{
+						begin: '{"',
+						end: '"}',
+						type: "content2"
+					}
 				];
-			var predefinedRelMarkers = [
-					["=", "синонимия*"]
-				];
-			var brackets = [
-					['["', '"]', "content"],
-					['{"', '"}', "content"]
-				];
-			var parser = new SCnML.Parser(arcs, relations, predefinedRelMarkers, brackets);
-			$("#string_tree").text(parser.parse(input).toString());
+			//var parser = new SCnML.Parser(arcs, relations, predefinedRelMarkers, brackets);
+			var parser = new SCnML.Parser(markers, content);
+			var outer = $('<outer />');
+			var article = parser.parse(input);
+			outer.append(article.getXml());
+			$("#string_tree").text(outer.html());
 		}
 		</script>
 		

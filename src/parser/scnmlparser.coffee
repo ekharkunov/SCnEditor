@@ -4,22 +4,23 @@
 #
 # This is a part of OSTIS technology (see http://ostis.net)
 #
-# Author: Burov Alexander (burikella@gmail.com) 2012
+# Authors:	Burov Alexander (burikella@gmail.com)
+#			Kharkunov Eugene ()
+#
+# Juny, 2012
 #
 
 window.SCnML = {}
 
 class SCnML.Parser
 
-	@markerChar = /[\u0021-\u002f]|[\u003a-\u0040]|[\u005b-\u0060]/gi;
-
-	constructor: (@arcMarkers, @relMarkers, @preDefRelMarkers, @brackets) ->
-		if typeof @arcMarkers == "undefined"
-			@arcMarkers = []
-		if typeof @relMarkers == "undefined"
-			@relMarkers = []
-		if typeof @brackets == "undefined"
-			@brackets = []
+	constructor: (@markers, @contentLimits) ->
+		if typeof @predefinedRelMarkers == "undefined"
+			@predefinedRelMarkers = []
+		if typeof @customRelMarkers == "undefined"
+			@customRelMarkers = []
+		if typeof @contentLimits == "undefined"
+			@contentLimits = []
 
 	parse: (@source) ->
 		@prepareSource()
@@ -69,50 +70,47 @@ class SCnML.Parser
 		@parseComponentInner article, indent + 1
 		return article
 
-	parseId: (current, hasUnderscore) ->
-		if typeof current == "undefined"
-			return @parseId '', false
-		else
-			ch = @src[0]
+	parseId: ->
+		id = ""
+		hasUnderscore = false
+		for ch in @src
 			if ch != '\n' and (ch != ':' or !hasUnderscore)
 				hasUnderscore = ch == '_' or ((ch == ' ' or ch == '\t') and hasUnderscore)
-				@moveNextChar()
-				return @parseId current + ch, hasUnderscore
+				id += ch
 			else
-				return current
+				@moveNextChar id.length
+				return id
 
 	parseComponentInner: (parent, indent) ->
 		@parseNewLine()
 		while @getIndent() == indent
 			@parseIndent()
-			arcMarker = @parseArcMarker()
-			if arcMarker?
-				@parseSpace()
-				arc = new SCnML.Arc arcMarker
-				parent.addChild arc
-				@parseInlineComponent arc, indent
-			else
-				rel = @parseRelMarker()
-				if rel?
-					@parseSpace()
-					id = @parseId()
-					conn = new SCnML.Connective rel, id
-					parent.addChild conn
-					@parseComponents conn, indent + 1
-				else
-					predef = @parsePredefRelMarker()
-					if predef?
-						@parseSpace()
-						conn = new SCnML.Connective predef[0], predef[1]
+			marker = @parseMarker()
+			if marker?
+				switch marker.set
+					when "predefined"
+						conn = new SCnML.Connective marker.type, marker.relation
 						parent.addChild conn
 						@parseInlineComponent conn, indent
-					else
-						throw "Expected Arc or Relation marker at line " + @getCurrentLine() + "!"
+					when "custom"
+						@parseSpace()
+						relation = @parseId()
+						conn = new SCnML.Connective marker.type, relation
+						parent.addChild conn
+						@parseComponents conn, indent + 1
+			else
+				throw "Expected marker ar line " + @getCurrentLine() + "."
 			@parseNewLine()
 		return
 
-	bracketFollows: ->
-		for b in @brackets when @startsWith b[0]
+	parseMarker: ->
+		for m in @markers when @isMatchMarker m[0]
+			@moveNextChar m[0].length
+			return m[1]
+		return null
+
+	contentFollows: ->
+		for c in @contentLimits when @startsWith c.begin
 			return true
 		return false
 
@@ -147,44 +145,57 @@ class SCnML.Parser
 		return
 
 	parseInlineComponent: (parent, indent) ->
-		content = @parseContent()
-		if content?
-			comp = new SCnML.Component content.type, content.content
-			parent.addChild comp
-		else
-			attrs = []
+		attrs = []
+		while @attrFollows()
 			id = @parseId()
+			@moveNextChar()
 			@parseSpace()
-			while @src[0] == ':'
-				@moveNextChar()
-				@parseSpace()
-				attrs.push id
-				id = @parseId()
-				@parseSpace()
-			if id == '[' and !@bracketFollows()
-				@squareBrackets++
-				@moveNextChar()
-				frame = new SCnML.Frame attrs
-				parent.addChild frame
-				@parseFrame frame, arcMarker, indent + 1
-			else if id == '{' and !@bracketFollows()
-				@curlyBrackets++
-				@moveNextChar()
-				conn = new SCnML.Connective 'undef', 'undef', attrs
-				parent.addChild conn
-				@parseComponents conn, indent + 1
-			else
-				comp = new SCnML.Component "ID", id, attrs
+			attrs.push id
+		@parseSpace()
+		if @contentFollows()
+			content = @parseContent()
+			if content?
+				comp = new SCnML.Component content.type, content.content, attrs
 				parent.addChild comp
+			else
+				throw "Content expected at line " + @getCurrentLine() + "."
+		else if @src[0] == '{'
+			@curlyBrackets++
+			@moveNextChar()
+			set = new SCnML.Set attrs
+			parent.addChild set
+			@parseComponents set, indent + 1
+		else if @src[0] == '['
+			@squareBrackets++
+			@moveNextChar()
+			frame = new SCnML.Frame attrs
+			parent.addChild frame
+			@parseFrame frame, arcMarker, indent + 1
+		else
+			id = @parseId()
+			comp = new SCnML.Component "ID", id, attrs
+			parent.addChild comp
 		@parseComponentInner comp, indent + 1
 		return true
 
+	attrFollows: ->
+		attr = ""
+		hasUnderscore = false
+		for ch in @src
+			if ch != '\n' and (ch != ':' or !hasUnderscore)
+				hasUnderscore = ch == '_' or ((ch == ' ' or ch == '\t') and hasUnderscore)
+				attr += ch
+			else if ch == ':'
+				return attr.length > 0;
+			else
+				return false
+
 	parseContent: ->
-		for c in @brackets when @startsWith c[0]
-			@moveNextChar c[0].length
+		for c in @contentLimits when @startsWith c.begin
+			@moveNextChar c.begin.length
 			return {
-				type: c[2],
-				content: @readUntil c[1]
+				type: c.type,
+				content: @readUntil c.end
 			}
 		return null
 
@@ -202,24 +213,6 @@ class SCnML.Parser
 				if !hasBackSlash
 					current += ch
 				return @readUntil str, current, hasBackSlash
-
-	parseArcMarker: ->
-		for m in @arcMarkers when @isMatchMarker mх[0]
-			@moveNextChar m.length
-			return m
-		return null
-
-	parseRelMarker: ->
-		for m in @relMarkers when @isMatchMarker m
-			@moveNextChar m.length
-			return m
-		return null
-
-	parsePredefRelMarker: ->
-		for m in @preDefRelMarkers when @isMatchMarker m[0]
-			@moveNextChar m[0].length
-			return m
-		return null
 
 	isMatchMarker: (marker) ->
 		nextChar = @src[marker.length]
@@ -282,11 +275,11 @@ class SCnML.Article
 	constructor: (@concept) ->
 		@childs = []
 
-	toString: ->
-		string = "(article[" + @concept + "]:\n"
-		string += "\n\t" + child.toString().replace("\n", "\n\t", "mg") for child in @childs
-		string += "\n)"
-		return string
+	getXml: ->
+		root = $ '<SCnArticle/>'
+		root.append $('<Concept />').text @concept
+		root.append child.getXml() for child in @childs
+		return root
 
 	addChild: (child) ->
 		@childs.push child
@@ -302,15 +295,19 @@ class SCnML.Component
 
 	constructor: (@type, @text, @attrs) ->
 		@childs = []
+		if typeof @attrs == "undefined"
+			@attrs = []
 
-	toString: ->
-		string = "(component[" + @type + "] {"
-		if typeof @attrs == 'object'
-			string += attr + ": " for attr in @attrs
-		string += @text + "}:\n"
-		string += "\n\t" + child.toString().replace("\n", "\n\t", "mg") for child in @childs
-		string += "\n)"
-		return string
+	getXml: ->
+		root = $ '<Component/>'
+		if @type == "ID"
+			root.append $('<Id/>').text @text
+		else
+			root.append $('<Type/>').text @type
+			root.append $('<Content/>').text @text
+		root.append $('<Attr />').text attr for attr in @attrs
+		root.append child.getXml() for child in @childs
+		return root
 
 	addChild: (child) ->
 		@childs.push child
@@ -325,18 +322,44 @@ class SCnML.Component
 	getClassName: ->
 		return "Component"
 
+class SCnML.Set
+
+	constructor: (@attrs)->
+		@childs = []
+		if typeof @attrs == "undefined"
+			@attrs = []
+
+	getXml: ->
+		root = $ '<Set/>'
+		root.append $('<Attr />').text attr for attr in @attrs
+		root.append child.getXml() for child in @childs
+		return root
+
+	addChild: (child) ->
+		@childs.push child
+		return
+
+	getChilds: ->
+		return @childs
+
+	getAttrs: ->
+		return @attrs
+
+	getClassName: ->
+		return "Set"
+
 class SCnML.Frame
 
 	constructor: (@attrs)->
 		@childs = []
+		if typeof @attrs == "undefined"
+			@attrs = []
 
-	toString: ->
-		string = "(frame "
-		if typeof @attrs == 'object'
-			string += attr + ": " for attr in @attrs
-		string += @text + "\n"
-		string += "\n\t" + child.toString().replace("\n", "\n\t", "mg") for child in @childs
-		string += "\n)"
+	getXml: ->
+		root = $ '<Frame/>'
+		root.append $('<Attr />').text attr for attr in @attrs
+		root.append child.getXml() for child in @childs
+		return root
 
 	addChild: (child) ->
 		@childs.push child
@@ -351,40 +374,20 @@ class SCnML.Frame
 	getClassName: ->
 		return "Frame"
 
-class SCnML.Arc
-
-	constructor: (@marker) ->
-		@childs = []
-
-	toString: ->
-		string = "(arc[" + @marker + "]\n\t"
-		string += @childs[0].toString().replace("\n", "\n\t", "mg") if @childs.length > 0
-		string += "\n)"
-		return string
-
-	addChild: (child) ->
-		@childs.push child
-		return
-
-	getChilds: ->
-		return @childs
-
-	getClassName: ->
-		return "Arc"
-
 class SCnML.Connective
 
-	constructor: (@marker, @text, @attrs) ->
+	constructor: (@type, @relation, @attrs) ->
 		@childs = []
+		if typeof @attrs == "undefined"
+			@attrs = []
 
-	toString: ->
-		string = "(connective[" + @marker + "] "
-		if typeof @attrs == 'object'
-			string += attr + ": " for attr in @attrs
-		string += @text + "{" + @text + "}:\n"
-		string += "\n\t" + child.toString().replace("\n", "\n\t", "mg") for child in @childs
-		string += "\n)"
-		return string
+	getXml: ->
+		root = $ '<Connective/>'
+		root.append $('<Type/>').text @type
+		root.append $('<Relation/>').text @relation
+		root.append $('<Attr />').text attr for attr in @attrs
+		root.append child.getXml() for child in @childs
+		return root
 
 	addChild: (child) ->
 		@childs.push child
