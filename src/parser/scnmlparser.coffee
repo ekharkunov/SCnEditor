@@ -5,7 +5,7 @@
 # This is a part of OSTIS technology (see http://ostis.net)
 #
 # Authors:	Burov Alexander (burikella@gmail.com)
-#			Kharkunov Eugene ()
+#			Kharkunov Eugene (filosovj@mail.ru)
 #
 # Juny, 2012
 #
